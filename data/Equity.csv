@@ -1,0 +1,20 @@
+﻿Country;Name;Ticker;Group
+Brazil;BOVEPSA;MXBR;BRICS
+Russia;MOEX;MXRU;BRICS
+India;SENSEX;MXIN;BRICS
+China;SSE Composite Index;MXCN;BRICS
+South Africa;JSE Top 40;MXZA;BRICS
+Mexico;IPC;MXMX;Latin America
+Argentina;MERVAL Index;MXAR;Latin America
+Chile;IPSA Index;MXCL;Latin America
+Colombia;COLCAP Index;MXCO;Latin America
+Peru;IGBVL Index;MXPE;Latin America
+Taiwan;TWSE Index;TAMSCI;Asia
+Thailand;SET 50;MXTH;Asia
+Philipines;PSEi Index;MXPH;Asia
+Malaysia;FTSE KLCI;MXMY;Asia
+Korea;KOPSI Index;MXKR;Asia
+Czech;PSE PX;MXCZ;Europe
+Hungary;BUX Index;MXHU;Europe
+Poland;SIX;MXPL;Europe
+Turkey;XU100;MXTR;Europe
