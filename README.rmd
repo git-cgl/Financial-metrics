@@ -21,6 +21,7 @@ LoadPackages <- function(){
   load_pkg(corepacks)
   
 }
+LoadPackages()
 ```
 
 
@@ -34,14 +35,14 @@ SampleTwoStartDate <- ymd(20100101)
 SampleTwoEndDate <- today() # This will be the last day in the dataset (2019-11-25)
 # -------------------------------------------------------- Datasets ------------------------------------------------------
 # Load list of equity indices which are grouped according to region, and transform each ticker
-equity.list <- read.csv(file="Equity.csv", sep = ";", header = TRUE)
+equity.list <- read.csv(file="./data/Equity.csv", sep = ";", header = TRUE)
 colnames(equity.list) <- c("Country","Name","Ticker","Group")
 equity.list <- equity.list %>% 
   mutate(Ticker = paste0(Ticker, " Index"))
 equity.list.tickers <- equity.list %>% pull(Ticker)
 
 # Load the actual MSCI Equity data, and create a column for period 1 and 2 according to date. Remember to convert date column from a factor to date format so that the code recognises the date properly
-msci <- read.csv(file="msci_latest.csv", sep = ";", header = TRUE)
+msci <- read.csv(file="./data/msci_latest.csv", sep = ";", header = TRUE)
 colnames(msci) <- c("date","Ticker","Name","Value")
 msci$date <- as.Date(msci$date)
 
@@ -52,7 +53,7 @@ msci <- msci %>%
 
 
 # Load the VIX data which is going to be stratified and used to proxy global uncertainty
-data.str <- read.csv(file="Strat_series.csv", sep = ';', header = TRUE)
+data.str <- read.csv(file="./data/Strat_series.csv", sep = ';', header = TRUE)
 colnames(data.str) <- c("date","Ticker","Name","Value")
 data.str$date <- as.Date(data.str$date)
 
@@ -171,6 +172,94 @@ CreateVIXStratPlot <- function(data, DistributionSplit, SampleOneStartDate, Samp
   
 }
 ```
+The following code will plot all of the equity returns
+
+```{r figreturns, fig.align='center', fig.cap="Weekly Equity Returns - BRICS  \\label{figreturns}", fig.height=3.7, fig.width=7}
+
+returns <- read_excel(path = "./data/returns_brics.xlsx",
+                      col_names = T)
+
+returns$Date <- as.Date(returns$Date)
+
+
+g1 <- ggplot(data = returns) + 
+  geom_line(aes(x = Date, y = Value,group=1, col=Country), size = 1.0) +
+  geom_hline(yintercept=0,col="black") + theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(caption = "Source - Authors calculations using MSCI (2019)", x = "", y = "Return") + 
+  facet_wrap(~Country, scales = "free") + guides(color = FALSE)
+
+
+
+print(g1)
+```
+
+
+```{r figreturns2, fig.align='center', fig.cap="Weekly Equity Returns - Latin America \\label{figreturns2}", fig.height=3.7, fig.width=7}
+
+returns <- read_excel(path = "./data/returns_latinamerica.xlsx",
+                      col_names = T)
+
+returns$Date <- as.Date(returns$Date)
+
+
+g1 <- ggplot(data = returns) + 
+  geom_line(aes(x = Date, y = Value,group=1, col=Country), size = 1.0) +
+  geom_hline(yintercept=0,col="black") + theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(caption = "Source - Authors calculations using MSCI (2019)", x = "", y = "Return") + 
+  facet_wrap(~Country, scales = "free") + guides(color = FALSE)
+
+
+
+print(g1)
+```
+
+```{r figreturns3, fig.align='center', fig.cap="Weekly Equity Returns - Asia \\label{figreturns3}", fig.height=3.7, fig.width=7}
+returns <- read_excel(path = "./data/returns_asia.xlsx",
+                      col_names = T)
+
+returns$Date <- as.Date(returns$Date)
+
+
+g1 <- ggplot(data = returns) + 
+  geom_line(aes(x = Date, y = Value,group=1, col=Country), size = 1.0) +
+  geom_hline(yintercept=0,col="black") + theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(caption = "Source - Authors calculations using MSCI (2019)", x = "", y = "Return") + 
+  facet_wrap(~Country, scales = "free") + guides(color = FALSE)
+
+
+
+print(g1)
+```
+
+```{r figreturns4, fig.align='center', fig.cap="Weekly Equity Returns - Europe \\label{figreturns4}", fig.height=3.7, fig.width=6}
+returns <- read_excel(path = "./data/returns_europe.xlsx",
+                      col_names = T)
+
+returns$Date <- as.Date(returns$Date)
+
+
+g1 <- ggplot(data = returns) + 
+  geom_line(aes(x = Date, y = Value,group=1, col=Country), size = 1.0) +
+  geom_hline(yintercept=0,col="black") + theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(caption = "Source - Authors calculations using MSCI (2019)", x = "", y = "Return") + 
+  facet_wrap(~Country, scales = "free") + guides(color = FALSE)
+
+
+
+print(g1)
+
+```
+
+
+
+
+
+
+
 
 ## DCC-GARCH
 
