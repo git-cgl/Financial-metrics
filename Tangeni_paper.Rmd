@@ -1,0 +1,662 @@
+---
+# IMPORTANT: Change settings here, but DO NOT change the spacing. 
+# Remove comments and add values where applicable. 
+# The descriptions below should be self-explanatory
+
+title: "Assessing the co-movement in emerging market equity indices: Using Dynamic Conditional Correlations in the pre and post crisis era under low and high global uncertainty episodes"
+#subtitle: "This will appear as Right Header"
+
+documentclass: "elsarticle"
+
+# Comment: ----- Follow this pattern for up to 5 authors
+Author1: "Tangeni Shatiwa"  # First Author
+Ref1: "Department of Economics, Stellenbosch University, South Africa" 
+Email1: "tangenishatiwa1994\\@gmail.com"
+
+
+keywords: "Multivariate DCC-GARCH \\sep Emerging markets \\sep global uncertainty \\sep portfolio diversification" 
+JELCodes: "L250 \\sep L100"
+
+# Comment: ----- Manage headers and footers:
+#BottomLFooter: $Title$
+#BottomCFooter:
+#TopLHeader: \leftmark # Adds section name at topleft. Remove comment to add it.
+BottomRFooter: "\\footnotesize Page \\thepage\\" # Add a '#' before this line to remove footer.
+addtoprule: TRUE
+addfootrule: TRUE               # Use if footers added. Add '#' to remove line.
+
+# Setting page margins:
+margin: 2.3 # Sides
+bottom: 2 # bottom
+top: 2.5 # Top
+
+linenumbers: FALSE # Used when submitting to journal
+AddTitle: TRUE # Used when submitting to peer reviewed platform. This will remove author names. 
+
+HardSet_layout: TRUE # Hard-set the spacing of words in your document. This will stop LaTeX squashing text to fit on pages, e.g. This is done by hard-setting the spacing dimensions. Set to FALSE if you want LaTeX to optimize this for your paper. 
+bibliography: Tex/ref.bib       # Do not edit: Keep this naming convention and location.
+RemovePreprintSubmittedTo: TRUE  # Removes the 'preprint submitted to...' at bottom of titlepage
+Journal: "Journal of Finance"   # Journal that the paper will be submitting to, if RemovePreprintSubmittedTo is set to TRUE.
+toc: FALSE                       # Add a table of contents
+numbersections: TRUE             # Should sections (and thus figures and tables) be numbered?
+fontsize: 11pt                  # Set fontsize
+linestretch: 1.2                # Set distance between lines.
+link-citations: TRUE            # This creates dynamic links to the papers in reference list.
+
+### Adding additional latex packages:
+# header-includes:
+#    - \usepackage{colortbl} # Add additional packages here.
+
+output:
+  pdf_document:
+    keep_tex: TRUE
+    template: Tex/TexDefault.txt
+    fig_width: 3.5 # Adjust default figure sizes. This can also be done in the chunks of the text.
+    fig_height: 3.5
+    include:
+      in_header: Tex/packages.txt
+abstract: |
+ This paper investigates the extent of conditional volatility and time-varying correlations in South African and 18 other emerging market equity indices between January 2000 and November 2019. With considerations related to the dynamics in returns and correlation being focal drivers in the trajectory of asset pricing and hedging strategies, the multivariate DCC-GARCH model is used to study these characteristics extensively. Specifically, these estimates are decomposed into pre and post global financial crisis periods in attempt to understand how the dynamics have evolved since the crisis' onset. Furthermore, episodes of high and low financial market volatility are characterised by stratifying the CBOE VIX into quintiles to assess whether these episodes intensify the correlations between equity indices. Overall, the main findings suggest a sharp rise in these co-movements in the post-Lehman era, as well as limited evidence to suggest that equity market correlations are magnified during these periods of uncertainty. These findings are bound to have considerable impacts on international investor decisions when considering the scope for hedging their portfolios across emerging markets, as well as policymaking decisions where the liberalisation of their capital markets is considered.
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = 6, fig.height = 5, fig.pos="H", fig.pos = 'H')
+# Note: Include = FALSE implies the code is executed, but not printed in your pdf.
+# warning and message = FALSE implies ugly messages and warnings are removed from your pdf. These should be picked up when you execute the command chunks (code sections below) in your rmd, not printed in your paper!
+
+```
+
+```{r include=FALSE}
+rm(list = ls())
+source(paste0(getwd(), "/code/LoadPackages.R"))
+source(paste0(getwd(), "/code/CreateVIXStratPlot.R"))
+source(paste0(getwd(), "/code/CreateIVQuintileStratificationDates.R"))
+LoadPackages()
+
+# -------------------------------------------------------- Set Parameters ------------------------------------------------------
+SampleOneStartDate <- ymd(20000101)
+SampleOneEndDate <- ymd(20080101)
+SampleTwoStartDate <- ymd(20100101)
+SampleTwoEndDate <- today()
+# -------------------------------------------------------- Load data ------------------------------------------------------
+
+equity.list <- read.csv(file="./data/Equity.csv", sep = ";", header = TRUE)
+colnames(equity.list) <- c("Country","Name","Ticker","Group")
+equity.list <- equity.list %>% 
+  mutate(Ticker = paste0(Ticker, " Index"))
+equity.list.tickers <- equity.list %>% pull(Ticker)
+
+msci <- read.csv(file="./data/msci_latest.csv", sep = ";", header = TRUE)
+colnames(msci) <- c("date","Ticker","Name","Value")
+msci$date <- as.Date(msci$date)
+
+msci <- msci %>%
+  mutate(Period = ifelse(date >= SampleOneStartDate & date <= SampleOneEndDate, "Period_1",
+                         ifelse(date >= SampleTwoStartDate & date <= SampleTwoEndDate, "Period_2", "Other"))) %>% 
+  filter(Period %in% c("Period_1", "Period_2")) %>% filter(Ticker %in% equity.list.tickers)
+
+data.str <- read.csv(file="./data/Strat_series.csv", sep = ';', header = TRUE)
+colnames(data.str) <- c("date","Ticker","Name","Value")
+data.str$date <- as.Date(data.str$date)
+
+
+# -------------------------------------------------------- Calculate Returns ------------------------------------------------------
+source("code/WeeklyReturnFunction.R")
+Weekly_Ret <- WeeklyReturnFunction(data = msci)
+
+if( nrow(Weekly_Ret %>% group_by(Period, Ticker) %>% filter(date - lag(date) > 7) ) > 0 ) stop("There are gaps in some of the currency returns for weekly frequency. Interrogate.")
+
+#======================================================================== GARCH Models
+# Volatility
+source("code/VolScripts.R")
+# DCC
+source("code/DCCModelsScript.R")
+
+#===============================================================================
+# Correlation plots
+#===============================================================================
+g.corr.brics <-
+  ggplot(df.corr %>% filter(Group == "BRICS")) + 
+  geom_line(aes(x = date, y = Rho, color = Country), alpha = 0.6) + 
+  facet_wrap(~Period, scales = "free") + 
+  ylim(-0.1, 1) +
+  theme_bw() +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") +
+  labs(x = NULL)
+
+g.corr.asia <- 
+  ggplot(df.corr %>% filter(Group == "Asia")) + 
+  geom_line(aes(x = date, y = Rho, color = Country), alpha = 0.6) + 
+  facet_wrap(~Period, scales = "free") + 
+  ylim(-0.1, 1) +
+  theme_bw() +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") +
+  labs(x = NULL)
+
+g.corr.latinamerica <-
+  ggplot(df.corr %>% filter(Group == "Latin America")) + 
+  geom_line(aes(x = date, y = Rho, color = Country), alpha = 0.6) + 
+  facet_wrap(~Period, scales = "free") + 
+  ylim(-0.1, 1) +
+  theme_bw() +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") +
+  labs(x = NULL)
+
+g.corr.europe <-
+  ggplot(df.corr %>% filter(Group == "Europe")) + 
+  geom_line(aes(x = date, y = Rho, color = Country), alpha = 0.6) + 
+  facet_wrap(~Period, scales = "free") + 
+  ylim(-0.1, 1) +
+  theme_bw() +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") +
+  labs(x = NULL)
+
+
+
+# --------------------------------------------- Create Strat Dates ---------------------------------------------------
+
+source("code/CreateVIXDates.R") 
+
+# ----------Correlations calcs
+source("code/CorrelationCalcs.R")
+
+```
+
+
+<!-- ############################## -->
+<!-- # Start Writing here: -->
+<!-- ############################## -->
+
+# Introduction \label{Introduction}
+
+The Intertemporal Capital Asset Pricing Model (ICAPM) characterised by @merton1973intertemporal analyses the impacts which time-varying factors have on expected asset returns. The rationale behind this model states that an optimal investment strategy involves hedging positions in a portfolio against current and forecasted risk factors. Traditionally, investors have perceived spreading their portfolios across several different countries to be an effective hedging method with the hope that an adverse shock will not have compounding effects across all markets. However, recent trends have seen the correlation patterns in between asset markets being heightened as a byproduct of the liberalisation and integration in these markets [@aloui2011global]. These correlations have been particularly researched in the emerging market economy (hereafter EME) context [see @bekaert2003market, @carrieri2007characterizing]. Furthermore, much of the recent debates in the portfolio management nexus have evolved around the transmission of risk between markets, with the perception that expectations in risk and volatility originating in developed markets can result in substantial spillover effects on EME assets.
+
+In light of the above, the primary objective of this paper is to analyse the interlinkages between equity indices in South Africa and its EME counterparts, with specific focus placed on how contagion has impacted these relationships. According to @martens2001returns, multivariate models perform better in explaining the information transmissions in global markets. This motivates the inclusion of the seminal multivariate DCC-GARCH model developed by @engle2002dynamic to be used in this paper. Within this framework, the behaviour in the conditional volatilities in EME equity returns can be modelled in the pre and post crisis era, before extending the analysis to understand the extent in which these equity indices are correlated. Furthermore, an assessment on the dynamics in these correlations during periods of high global uncertainty will be made by stratifying the VIX into quintiles to see whether these correlations are magnified during these episodes. The *a priori* expectation in this sense is that the change in risk perceptions when higher volatility is forecasted should influence investors to unwind their investment positions across EMEs, which would imply a greater degree in co-movement during high VIX episodes.
+
+In summarising the main findings of this paper, the model confirms time-varying co-movement patterns between South Africa and most EMEs to have increased considerably since the onset of the global financial crisis. A potential reason for this finding can be explained by the extent in which large-scale asset purchases and other unconventional strategies carried out by major central banks (such as the Fed and ECB) have driven asset prices in EMEs closer to each other [see @kryzanowski2017cross, @katzke2017carry]. Furthermore, it appears that the correlation patterns between the South African index and those in the Latin American and the Asian region have been considerably higher when compared to correlations with European economies. Contrary to the *a priori* theory, the paper finds no clear difference between correlations in high and low VIX episodes. This suggests that the implied volatility on the US equity market has not been as influential in the dynamic co-movement in EME equity markets as previously thought. However, spillover effects arising from global volatility should not be ruled out completely, with fluctuations in oil and gold prices being estimated to result in contagion within EME equity markets in several papers [@mensi2013correlations, @diebold2012better]. The findings highlighted in this paper should be of particular relevance to international investors from an asset allocation and hedging perspective, as well as for policymakers where the liberalisation of their capital markets is being considered.
+
+The rest of the paper is structured as follows. Section \ref{Data} provides a description of the dataset used in this paper. Thereafter, the structure and rationale related to the application of the DCC-GARCH framework in the equity returns context is unpacked extensively throughout section \ref{Methodology}. The empirical findings from the model are discussed in section \ref{Results} before presenting concluding remarks in section \ref{Conclusion}.
+
+
+# Data \label{Data}
+
+This paper uses equity indices extracted from the Morgan Stanley Capital International (MSCI) Emerging Markets database, measured in USD. The use of MSCI data holds
+merit on the premise that each of these indices are comprised of large capitalisation and actively traded stocks, therefore mitigating biased
+estimates in the model which could arise from non-synchronous trading or bid-ask spreads [@fong2005international]. The geographical scope for this research stretches over 19 EMEs in Latin America, Emerging Europe, Asia and the BRICS members, spanning from the first week of January 2000 up until the final week of November 2019. From this data, the model characterises a pre and post crisis period in order to conceptualise how the dynamics in equity correlations have evolved since the onset of the crisis. Furthermore, periods of high and low global uncertainty will be defined to assess whether contagion effects arising from an increase in global risk appetite have intensified the correlations in these returns. Midweek returns (*i.e* the percentage change between consecutive Wednesday values on each index) are calculated in order to underpin the synchronicity in the model further, and avoid the noise in the variance which could occur at a higher (daily) frequency. The summary statistics from these returns are presented in table \ref{summarystats}, and are discussed prior to analysing the model's empirical findings in section \ref{Results}.
+
+Figures \ref{figreturns} - \ref{figreturns4} illustrate the weekly equity returns in all 19 of the EMEs categorised by their respective economic/regional groups. From these panels, we can see that weekly returns fluctuate between positive and negative values throughout each time series. It is worth noting that intensified volatility around 2006 arose from a signal by the Fed in that their policy rate was set to increase, triggering considerable capital outflows from EMEs as a consequence [@bonga2017assessing]. A similar trend (known as the Taper Tantrum) re-emerged in these EMEs in 2013, which has since seen a shift in sentiment within these economies to improve their resillience against contagion effects.^[The Taper Tantrum refers to the phenomenon in which international investors opted to unwind their positions in EMEs due to fears of a possible slowdown in global liquidity, given the Fed's unanticipated signaling of their intent to scale back on the expansion of their balance sheet. @sahay2014emerging explain this shift in sentiment to involve a combination of strenghtening domestic macroeconomic fundamentals as well as employing macro-prudential controls.] Each panel shows an abnormal spike in returns coinciding with global financial crisis period in 2008, which will need to be addressed in the model. Furthermore, it appears that all of the equity markets in question exhibit evidence of volatlity clustering and heteroskedasticity when interpreting the variance in the amplitude of these returns. With this in mind, employing a GARCH model is likely to be appropiate in assessing the underlying dynamics within the variance of these returns. 
+
+
+```{r figreturns, fig.align='center', fig.cap="Weekly Equity Returns - BRICS  \\label{figreturns}", fig.height=3.7, fig.width=7}
+
+returns <- read_excel(path = "C:/Users/Tanga/Documents/Financial Econometrics/template/data/returns_brics.xlsx",
+                      col_names = T)
+
+returns$Date <- as.Date(returns$Date)
+
+
+g1 <- ggplot(data = returns) + 
+  geom_line(aes(x = Date, y = Value,group=1, col=Country), size = 1.0) +
+  geom_hline(yintercept=0,col="black") + theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(caption = "Source - Authors calculations using MSCI (2019)", x = "", y = "Return") + 
+  facet_wrap(~Country, scales = "free") + guides(color = FALSE)
+
+
+
+print(g1)
+
+
+
+
+```
+
+
+```{r figreturns2, fig.align='center', fig.cap="Weekly Equity Returns - Latin America \\label{figreturns2}", fig.height=3.7, fig.width=7}
+
+returns <- read_excel(path = "C:/Users/Tanga/Documents/Financial Econometrics/template/data/returns_latinamerica.xlsx",
+                      col_names = T)
+
+returns$Date <- as.Date(returns$Date)
+
+
+g1 <- ggplot(data = returns) + 
+  geom_line(aes(x = Date, y = Value,group=1, col=Country), size = 1.0) +
+  geom_hline(yintercept=0,col="black") + theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(caption = "Source - Authors calculations using MSCI (2019)", x = "", y = "Return") + 
+  facet_wrap(~Country, scales = "free") + guides(color = FALSE)
+
+
+
+print(g1)
+
+
+
+
+```
+
+```{r figreturns3, fig.align='center', fig.cap="Weekly Equity Returns - Asia \\label{figreturns3}", fig.height=3.7, fig.width=7}
+returns <- read_excel(path = "C:/Users/Tanga/Documents/Financial Econometrics/template/data/returns_asia.xlsx",
+                      col_names = T)
+
+returns$Date <- as.Date(returns$Date)
+
+
+g1 <- ggplot(data = returns) + 
+  geom_line(aes(x = Date, y = Value,group=1, col=Country), size = 1.0) +
+  geom_hline(yintercept=0,col="black") + theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(caption = "Source - Authors calculations using MSCI (2019)", x = "", y = "Return") + 
+  facet_wrap(~Country, scales = "free") + guides(color = FALSE)
+
+
+
+print(g1)
+
+
+
+
+```
+
+```{r figreturns4, fig.align='center', fig.cap="Weekly Equity Returns - Europe \\label{figreturns4}", fig.height=3.7, fig.width=6}
+returns <- read_excel(path = "C:/Users/Tanga/Documents/Financial Econometrics/template/data/returns_europe.xlsx",
+                      col_names = T)
+
+returns$Date <- as.Date(returns$Date)
+
+
+g1 <- ggplot(data = returns) + 
+  geom_line(aes(x = Date, y = Value,group=1, col=Country), size = 1.0) +
+  geom_hline(yintercept=0,col="black") + theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(caption = "Source - Authors calculations using MSCI (2019)", x = "", y = "Return") + 
+  facet_wrap(~Country, scales = "free") + guides(color = FALSE)
+
+
+
+print(g1)
+
+
+
+
+```
+
+
+In assessing whether higher global uncertainty intensifies the co-movement between these equity indices, the paper proxies this uncertainty through the CBOE Volatility Index (VIX).^[The VIX proxies the market's expectation of future volatility on S&P500 options.] The VIX has been used as a measure for global financial market volatility in several papers such as @rey2015dilemma and @friedrich2016dynamics, which supports its inclusion in this study. In absolute terms, a VIX above 20 typically implies that the market is forecasting a high risk environment, with values below 20 considered as stable. This model employs a different approach in defining periods of high and low uncertainty, by stratifying the VIX into quintiles and analysing the correlations between indices in the event that these quintiles are breached. An assumption is imposed where the VIX is required to have breached the top or bottom quintile for a minimum of 30 trading days in order for a high/low uncertainty period to be characterised. This will ensure that the bivariate correlation pairs presented in table \ref{pairwise} are estimated with a sufficient number of observations in these periods. Additionally, the initial 10 trading days are omitted in the conditional correlation mean calculations to allow for an adjustment period in sentiment. The VIX over the past two decades is presented in figure \ref{figVIX},
+with the periods of high and low uncertainty shaded in pink. Due to the surge in the VIX during the global financial crisis, all of the weekly returns and VIX observations falling between the first day of 2008 and the final day of 2009 are ignored in the model to avoid biased estimates
+in the post crisis period. 
+
+
+
+```{r figVIX, fig.align='center', fig.cap="CBOE Volatility Index (VIX) \\label{figVIX}", fig.height=3, fig.width=6} 
+# Make a plot of the vix index to put a picture to those dates you are pulling afterwards
+
+CreateVIXStratPlot(data = data.str, DistributionSplit = 0.2, SampleOneStartDate, SampleOneEndDate, 
+                                                              SampleTwoStartDate, SampleTwoEndDate, MinTradeDays = 30, NoTradeDaysToMinusBeg = 10, TickerToPlot = "VIX Index")
+
+
+
+
+```
+
+#  Methodology \label{Methodology}
+
+An extensive range of techniques have been applied in previous research to model the correlations in asset returns within a portfolio. The standard method for estimating correlations in portfolio analytics has been the moving average specification of errors in a time series. Though a relatively simple process to estimate, this method has fallen out of favour in recent years due to its flawed assumption that past error term observations are weighted equally. @bollerslev1990modelling pioneered the analysis of correlations in the multivariate GARCH framework by developing the constant conditional correlation (CCC) model, where univariate GARCH models are computed for each asset followed by the estimation of the correlation matrix. Even though this idea of correlation coefficients being constant over time was deemed as plausible in his paper, recent studies have found this property to be unrealistic across certain asset types (see @tsui1999constant). This gave rise to the modification of this framework by @engle2002dynamic, widely known as the dynamic conditional correlation (DCC) GARCH model.^[In his seminal paper, @engle2002dynamic relaxes the constant constraint by allowing these coefficients to vary over time.] This seminal model forms the basis for the estimation framework used in this paper.
+
+The selection of this approach is based on two reasons. Firstly, the empirical performance of DCC models are well documented, which is underpinned in @martens2001returns and @laurent2012forecasting. Secondly, opting for this approach will ensure parsimony. Considering that most conditional volatility and correlation analyses are multivariate in nature, a flexible approach is required to avoid the curse of dimensionality faced when a large number of coefficients need to be estimated. Instead of estimating the covariance matrix and deriving conditional correlations from it, the DCC model estimates the correlation matrix directly through using standardised residuals. This is advantageous as the number of parameters which need to be estimated are reduced when using this method.
+
+In this study, DCC coefficients are estimated between the South African equity index and the remaining EME equity indices in the sample, which follows a three step process. In the first step, financial returns on each equity index are calculated at a weekly frequency before employing a demeaning process to derive residuals from these returns (see @engle2001theoretical). As highlighted previously, the rationale behind opting for weekly return computations as opposed to daily returns is predicated on avoiding the noise in the data which could occur at such a high frequency. Furthermore, extreme observations in each of the returns are cleaned using a technique developed by @boudt2008estimation, which will improve the robustness in the risk estimates. The regression model which is employed for these returns follows a stochastic process, specified below
+
+\begin{equation}
+r_t = a_0 + {a_1}{r_{t-1}} + \varepsilon_t
+\label{eq1}
+\end{equation}
+
+
+where $r_t$ represents the weekly returns on each equity index in the model and $\varepsilon_t$ is a k x 1 vector of the residual returns in $r_t$.^[k denotes the number of equity indices used in the model.]
+
+The second step involves the estimation of parameters in the variance models with the use of the residuals derived in equation \ref{eq1}. The standard multivariate GARCH framework is applied, where equity returns are assumed to be conditionally multivariate normal with zero expected value and a k x k time-varying covariance matrix, $H_t$
+
+\begin{equation}
+\varepsilon_t = D_t \upsilon_t \sim N(0, H_t)
+\label{eq2}
+\end{equation}
+
+
+where $D_t$ represents a k x k diagonal matrix of dynamic standard deviations in the residual returns, and  $\upsilon_t$ represents a column vector
+of standardised residual returns. Moreover, $H_t$ takes on the following form
+
+\begin{equation}
+H_t = D_t R_t D_t
+\label{eq3}
+\end{equation}
+
+
+where $R_t$ is a k x k matrix of time-varying conditional correlation coefficients. This dynamic property serves as the main modification of the CCC model which was discussed earlier. The variances are derived through a first order univariate GARCH (1,1) process, as follows
+
+\begin{equation}
+h_t = b_0 + b_1\varepsilon_{t-1}^{2} + b_2\varepsilon_{t-1}^{2}
+\label{eq4}
+\end{equation}
+
+
+The log-likelihood function to determine the parameters in equations \ref{eq4} and \ref{eq7} is given by
+
+ \begin{align} \label{eq5}
+l &= -0.5 \sum_{t=1}^{T}[n log(2\pi) + log(\mid H_t \mid) + \varepsilon_t^{'} H_t \varepsilon_t] \hfill  \\ \notag
+                     &= -0.5 \sum_{t=1}^{T}[n log(2\pi) + log(\mid D_t R_t D_t \mid) + \upsilon_t^{'}D_t^{-1}R_t^{-1}D_t^{-1}\upsilon_t] \notag
+                           \end{align}
+
+
+Thereafter, the following can be considered
+
+ \begin{align} \label{eq6}
+ \varepsilon_t^{'} D_t^{-2} \varepsilon_t &=  \varepsilon_t^{'} D_t^{-1} D_t^{-1} \varepsilon_t = [D_t^{-1} \varepsilon_t]^{'}D_t^{-1}\varepsilon_t = \upsilon_t^{'}\upsilon_t, \hfill  \\ \notag
+                     l &= -0.5 \sum_{t=1}^{T} [nlog(2\pi) + 2log( \mid D_t \mid) + \varepsilon_t^{'} D_t^{-2} \varepsilon_t] -0.5 \sum_{t=1}^{T} [log(\mid R_t \mid) + \varepsilon_t^{'}R_t^{-1} \varepsilon_t - \upsilon_t^{'}\upsilon_t] \hfill \\ \notag
+                     &= l_1 + l_2
+                           \end{align}
+
+
+where:
+
+\begin{equation}
+l_1 = -0.5 \sum_{t=1}^{T}[nlog(2\pi) +  2 log(\mid D_t \mid ) + \varepsilon_t^{'} D_t^{-2} \varepsilon_t]
+\label{eq7}
+\end{equation}
+
+
+and 
+
+\begin{equation}
+l_2= -0.5 \sum_{t=1}^{T} [log(\mid R_t \mid ) + \varepsilon_t^{'}R_t^{-1}\varepsilon_t - \upsilon_t^{'}\upsilon_t]
+\label{eq8}
+\end{equation}
+
+
+
+Equations \ref{eq7} and \ref{eq8} show that the log-likelihood function can be decomposed into functions of variances and correlations. The parameters of variances in $l_t$ are determined
+without simultaneous determinations of the correlation parameters by maximising $l_t$.
+
+The third and final step in the model involves the estimation of correlation coefficients. The correlation coefficients between equity index returns $i$ and $j$ at period $t$ can be expressed as follows
+
+\begin{equation}
+\rho_{ijt} = \frac{E_{t-1}[\varepsilon_{it}\varepsilon_{jt}]}{\sqrt{E_{t-1}[\varepsilon_{it}^2]} \sqrt{E_{t-1}[\varepsilon_{jt}^2]}} = \frac{E_{t-1}[\sqrt{h_{it}}\upsilon_{1t}\sqrt{h_{jt}} \upsilon_{jt}]}{\sqrt{E_{t-1}[h_{it}v_{it}^2]}\sqrt{E_{t-1}[h_{jt}v_{it}^2]}} = \frac{E_{t-1}[v_{it}v_{it}]}{\sqrt{E_{t-1}[v_{it}^2]}\sqrt{E_{t-1}[v_{jt}^2]}} = E_{t-1}[v_{it}v_{jt}]
+\label{eq9}
+\end{equation}
+
+
+where
+\begin{equation}
+E_{t-1}[\upsilon_{it}^2] = E_{t-1}[h_{it}^{-1}\varepsilon_{it}^2] = h_{it}^{-1}E_{t-1}[\varepsilon_{it}^2] = 1
+\label{eq15}
+\end{equation}
+
+The correlation coefficients in $\rho_{ijt}$ form the correlation matrix $R_t$, where its diagonal elements are equal to 1. 
+
+If the unconditional variance estimate used in the model (denoted by $Q_t$) can be expressed by the following
+
+\begin{equation}
+Q_{t} = E_{t-1}[\upsilon_t\upsilon_t{'}]
+\label{eq10}
+\end{equation}
+
+
+then $R_t$ can be rewritten as 
+
+\begin{equation}
+R_{t} = [diag(Q_t)]^{-\frac{1}{2}} Q_t[diag(Q_t)]^{-\frac{1}{2}} 
+\label{eq11}
+\end{equation}
+
+Thereafter, the correlation coefficient $\rho_t$ should be parameterised. For this to be achieved, the model assumes that $Q_t$ follows an autoregressive process. This would entail that 
+
+\begin{equation}
+Q_{t} = \overline{Q} (1 - \alpha - \beta) + \alpha \upsilon_{t-1} \upsilon_{t-1}^{'} + \beta Q_{t-1}
+\label{eq12}
+\end{equation}
+
+where $\alpha$ and $\beta$ are scalar parameters which capture the effects of past shocks and DCCs on current DCCs. In the case of the DCC(1,1),  $\alpha$ and $\beta$ are positive and $\alpha$ + $\beta$ < 1, which ensures that $Q_t$ is positive and mean-reverting. This property implies that in the event of a shock, the correlation between the underlying assets will return to its long run unconditional level. $\overline{Q}$ is an unconditional correlation coefficient matrix. The unconditional correlations are determined in the second step and
+used as predetermined values in this step (@engle2001theoretical). The parameters for the dynamic correlations are derived by maximising the log
+likelihood function $l_2$. Considering that $\upsilon_t^{'} \upsilon_t$ does not involve the determination of parameters, the log likelihood function
+can be reduced to 
+
+\begin{equation}
+l_2 = -0.5 \bullet_{t=1}^{T} [log(R_t) + \varepsilon_t^{'} R_t^{-1} \varepsilon_t]
+\label{eq13}
+\end{equation}
+
+
+Finally, the correlation model in equation \ref{eq12} can be used to estimate the co-movement in equity indices by pairing the South African equity index with the remaining indices in the sample. As highlighted previously, these co-movements are studied generally before analysing them under high and low uncertainty episodes to form conclusions of contagion effects arising from implied volatility on the S&P500.
+The findings from the correlation pairs are presented throughout section \ref{Results}.
+
+
+# Results \label{Results}
+
+The summary statistics for the weekly equity returns in all of the EMEs considered in this paper are presented in table \ref{summarystats}. The mean returns prior to the onset of the global financial crisis range from 0.68% in Colombia and the Czech Republic, with the Philippines and Taiwan reporting the lowest mean returns of 0.19% and 0.06% respectively. Notably, these average weekly returns were higher during this period when contrasted with the post crisis period across all of the sample economies. This should be expected, given the sharp deceleration in portfolio flows to EMEs immediately after the financial crisis (largely fuelled by a rise in global risk aversion), as well the more recent equity outflow episodes which EMEs have experienced since the Taper Tantrum in 2013 (see @milesi2011great, @sahay2014emerging). The standard deviation values in this pre-crisis period indicate that Turkish and Russian equity markets have displayed the greatest degree of risk.  Surprisingly, lower standard deviation scores were reported in all of the economies after the financial crisis (with the exception of Argentina and Hungary), contrary to the consensus which suggests that financial markets have been more volatile throughout the post-Lehman era (see @grima2017effect).  This finding on Argentina in the post crisis period is best explained as a result of interest rate hikes which their central bank has had to employ in attempt to counteract the high inflation episodes they've faced in recent years.^[@cachanosky2019did highlighted these high policy interest rates coupled with an increase in sovereign default risk and devaluations in the peso as core reasons behind the recent surge in speculative activity across Argentinean financial markets.]
+
+The estimation of conditional volatilities provides further insight into the dynamics within equity returns over the past two decades. From figures \ref{bricsvol} - \ref{vol.europe}, it is evident that the BRICS and Latin American economies have been characterised by substantial levels in equity market volatility (notably in Argentina, Brazil as well as a recent surge in South African conditional volatility). This finding should bear concerns for investors with investment exposure in these economies. The effects caused by the Taper Tantrum are most evident in the BRICS and Asian economies, seen by an uptick in conditional volatility between 2013 and 2015 when analysing these plots closely. In the Asian region, the lowest conditional volatility is seen in the Malaysian case. Interestingly, the conditional volatilities throughout the Asian region were lower in the post crisis period when contrasted to prior to 2008. Similar sentiments related to lower Asian equity market conditional volatility in the post crisis era are found in @roni2018return.
+
+```{r volplotbrics, warning=FALSE, fig.align='center', fig.cap="BRICS conditional volatility \\label{bricsvol}", fig.height=3, fig.width=6}
+ggplot(vol.df %>% filter(Group == "BRICS")) + 
+  geom_line(aes(x = date, y = Sigma, color = Country), alpha = 0.6) + 
+  theme_bw() + facet_wrap(~Period, scales = "free") +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
+  ylim(0, 0.1) +
+  labs(x = NULL)
+```
+
+```{r vol2, warning=FALSE, fig.align='center', fig.cap="Asia Conditional Volatility \\label{vol.asia}", fig.height=3, fig.width=6, include=TRUE}
+ggplot(vol.df %>% filter(Group == "Asia")) + 
+  geom_line(aes(x = date, y = Sigma, color = Country), alpha = 0.6) + 
+  theme_bw() + facet_wrap(~Period, scales = "free") +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
+  ylim(0, 0.1) +
+  labs(x = NULL)
+
+
+```
+
+```{r vol3, warning=FALSE, fig.align='center', fig.cap="Latin America Conditional Volatility \\label{vol.south.america}", fig.height=3, fig.width=6, include=TRUE}
+
+ggplot(vol.df %>% filter(Group == "Latin America")) + 
+  geom_line(aes(x = date, y = Sigma, color = Country), alpha = 0.6) + 
+  theme_bw() + facet_wrap(~Period, scales = "free") +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
+  ylim(0, 0.1) +
+  labs(x = NULL)
+
+
+```
+
+```{r vol4, warning=FALSE, fig.align='center', fig.cap="Europe Conditional Volatility \\label{vol.europe}", fig.height=3, fig.width=6, include=TRUE}
+
+ggplot(vol.df %>% filter(Group == "Europe")) + 
+  geom_line(aes(x = date, y = Sigma, color = Country), alpha = 0.6) + 
+  theme_bw() + facet_wrap(~Period, scales = "free") +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") + 
+  ylim(0, 0.12) +
+  labs(x = NULL)
+
+
+```
+
+
+
+
+
+
+In analysing the bivariate correlations  between the South African equity index and the remaining EMEs represented in figures \ref{dcc1} - \ref{dcc4}, almost all cases experienced a considerable rise in correlation between the pre and post crisis period. @kryzanowski2017cross support this finding with their conclusion on the rise in EME equity correlations occuring in the aftermath of the first two phases of QE.^[This phenomenon entails that the large scale asset purchases carried out by the major central banks such as the Fed and ECB have driven asset prices in EMEs closer to each other.] The correlations between the South African equity market and majority of the EMEs studied in this paper are estimated to hover around the 0.5 mark since the crisis. In interpreting this, it can be expected that a 1% increase in the South African equity index will coincide with an atleast 0.5% rise on a corresponding EME equity index. The highest correlations are seen in the relationship between the South African index with Chile, Mexico, China, Korea and Poland. Also, it appears that the Argentinean case in conjunction with three of the four European EMEs exhibit the lowest degree of correlation with South Africa across the sample. Naturally, these co-movements pose the challenge for investors to successfully hedge their portfolios through exposure in different EMEs. These high correlations should also be of concern to policymakers in these economies when weighing up considerations of liberalising their capital markets, as the inter-connectedness in these indices serves as an indication that volatility in another EME can result in spillover effects in their local financial markets.
+
+```{r dcc1, warning=FALSE, fig.align='center', fig.cap="South Africa-BRICS DCC \\label{dcc1}", fig.height=3, fig.width=6, include=TRUE}
+  print(g.corr.brics)
+```
+```{r dcc2, warning=FALSE, fig.align='center', fig.cap="South Africa-Asia DCC \\label{dcc2}", fig.height=3, fig.width=6, include=TRUE}
+print(g.corr.asia)
+```
+```{r dcc3, warning=FALSE, fig.align='center', fig.cap="South Africa-Latin America DCC \\label{dcc3}", fig.height=3, fig.width=6, include=TRUE}
+print(g.corr.latinamerica)
+```
+```{r dcc4, warning=FALSE, fig.align='center', fig.cap="South Africa-Europe DCC\\label{dcc4}", fig.height=3, fig.width=6, include=TRUE}
+print(g.corr.europe)
+```
+
+
+Interestingly, the findings suggest that correlations do not differ considerably during periods of low and high global uncertainty, contrary to the findings in @cappiello2006asymmetric as well as @sarwarimpact. Figures \ref{dcc6} - \ref{dcc9} illustrate the correlations discussed with the shaded areas representing the periods of low and high volatility specified in the model. It appears that the bivariate correlations remain relatively constant when intersecting with the high VIX episodes in both the pre and post crisis period, which serves as an indication that higher implied US stock market volatility does not necessarily intensify the inter-connectedness in these equity returns. Table \ref{pairwise}
+reports the average correlation pairs during the high and low VIX periods, where they are estimated to be relatively similar in both cases. Therefore, international investors can take some consolation from this finding as the spillover effects from the US stock market volatility do not appear to have had a substantial impact on equity correlations across the sample.
+
+Overall, the findings uncovered throughout this section are bound to have considerable implications for both international investor as well as policymaking decisions. From a international investor perspective, the rationale behind investing in EMEs is predicated on being able to maximise asset returns while contemporaneously minimising the risk associated with these assets. @markowitz1952portfolio pioneered the idea of portfolio diversification in emphasizing that the holdings within a portfolio should not be strongly correlated. In this sense, the findings uncovered in the bivariate pairs suggest that investors have less scope to diversify their portfolios purely through investing in different EMEs. This notion has been emphasised in the post-Lehman era when contrasted with the correlations prior to the crisis' onset. Furthermore, the high correlations between these assets should be of particular importance to policymakers who are aiming to navigate their economies around the risk of contagion and capital flow volatility through using macro-prudential tools.
+
+# Conclusion \label{Conclusion}
+
+This paper offers a perspective on the conditional volatility and the inter-connectedness exhibited in the returns on equity indices across EMEs. Through employing a multivariate DCC-GARCH approach, the magnitude in correlations between returns on the South African equity index and 18 of its EME counterparts are analysed extensively. Furthermore, this research focuses on the possible contagion effects which arise in these economies due to higher US equity market volatility, where the dynamics in these co-movements during high VIX periods are assessed. The main findings uncovered in the paper suggest that the bivariate correlations between South Africa and most of the EMEs in question have risen substantially since the global financial crisis, as well as limited evidence to suggest that equity co-movements have been
+heightened during periods of high implied volatility. From a conditional volatility perspective, the Asian region and isolated cases such as the Czech Republic and Turkey have exhibited a decline during the post-Lehman era.
+
+The higher correlations between these equity pairs suggest that policymakers should respond to negative shocks with an improvement in macroeconomic fundamentals in their respective economies. Therefore, it is crucial for policymakers to build an understanding on the underlying mechanisms which drive these co-movements for appropriate policy decisions to be carried out. If they fail to factor these characteristics into their decision process, it is possible that they will end up doing worse rather than better. One can argue that the Fed (through improved forward guidance) and the IMF (by intervening with balance of payments support) should have a greater responsibility in insulating EMEs which are most vulnerable to contagion. In explaining the implications these findings have on international portfolio management, investors should realise that their pursuit for arbitrage opportunities and portfolio diversification requires a more holistic approach than merely spreading a portfolio across different EMEs. The sizing of an allocation and employing long-horizon investment strategies could be crucial in counteracting these risks highlighted above [see @viceira2018global, @scott2019global].
+
+Conclusively, interesting extensions for this research in the future could be achieved by testing for contagion across multiple asset classes, as well as investigating the role which institutional investors (such as hedge funds and mutual funds) have had in fuelling these increases in risk. Furthermore, the use of block-structure parameter matrices can improve the robustness of the estimates while preserving the simplicity of the model, as applied in @billio2003block. This can be achieved because the dynamic nature of the correlations are allowed to be non identical across the assets in the estimation process, hence overcoming one of the main shortcomings of the DCC-GARCH approach.
+
+
+\newpage
+
+# Appendix \label{Appendix}
+
+
+```{r tabsample, results= 'asis'}
+df.sample <- xtable(equity.list, caption = "List of equity indices \\label{tabsample}")
+
+print.xtable(df.sample, 
+              tabular.environment = "longtable",
+             floating = FALSE,
+             table.placement = 'H', 
+             # scalebox = 0.3, 
+             comment = FALSE,
+             caption.placement = 'top'
+             )
+```
+
+
+
+```{r sumstats, results='asis'}
+# Period 1
+df.summary.stats.1 <- 
+    Weekly_Ret %>% filter(Period == "Period_1") %>% 
+    group_by(Ticker) %>% 
+    summarise(Mean = mean(Weekly_Return), StandardDeviation = sd(Weekly_Return)) %>% ungroup() %>% 
+    mutate_at(., vars(Mean, StandardDeviation), funs(round(., 4))) %>% rename("SD Period 1" = StandardDeviation, "Mean Period 1" = Mean) %>% 
+  
+  left_join(., 
+                Weekly_Ret %>% filter(Period == "Period_2") %>% 
+    group_by(Ticker) %>% 
+    summarise(Mean = mean(Weekly_Return), StandardDeviation = sd(Weekly_Return)) %>% ungroup() %>% 
+    mutate_at(., vars(Mean, StandardDeviation), funs(round(., 4))) %>% rename("SD Period 2" = StandardDeviation, "Mean Period 2" = Mean),
+    by = "Ticker")
+
+df.sum.stats.1 <- 
+  xtable(df.summary.stats.1, caption = "Equity Returns Summary Statistics \\label{summarystats}", digits=c(0, 0, 4, 4, 4, 4))
+
+print.xtable(df.sum.stats.1,
+              tabular.environment = "longtable",
+             floating = FALSE,
+             table.placement = 'H', 
+             # scalebox = 0.3, 
+             comment = FALSE,
+             caption.placement = 'top'
+             )
+
+```
+
+
+```{r corrtable, results='asis'}
+df.corr.vix.print <- 
+  xtable(df.corr.vix, caption = "Average pairwise correlations \\label{pairwise}")
+
+print.xtable(df.corr.vix.print, 
+              tabular.environment = "longtable",
+             floating = FALSE,
+             table.placement = 'H', 
+             # scalebox = 0.3, 
+             comment = FALSE,
+             caption.placement = 'top'
+             )
+```
+
+
+
+## Dynamic Conditional Correlations with uncertainty
+```{r dcc6, warning=FALSE, fig.align='center', fig.cap="South Africa-BRICS DCC\\label{dcc6}", fig.height=3, fig.width=6, include=TRUE}
+ggplot(df.corr %>% filter(Group == "BRICS")) + 
+  geom_line(aes(x = date, y = Rho, color = Country), alpha = 0.6, size = 1) + 
+  geom_rect(data = High.VIX, aes(xmin = StartDate, xmax = EndDate, ymin=-Inf, ymax=+Inf), fill='pink', alpha=0.4) +
+  geom_rect(data = Low.VIX, aes(xmin = StartDate, xmax = EndDate, ymin=-Inf, ymax=+Inf), fill='palegreen4', alpha=0.2) +
+  facet_wrap(~Period, scales = "free") +
+  ylim(-0.1, 1) +
+  theme_bw() +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(x = NULL, caption = "Green: high VIX, red: low VIX")
+```
+```{r dcc7, warning=FALSE, fig.align='center', fig.cap="South Africa-Asia DCC \\label{dcc7}", fig.height=3, fig.width=6, include=TRUE}
+ggplot(df.corr %>% filter(Group == "Asia")) + 
+  geom_line(aes(x = date, y = Rho, color = Country), alpha = 0.6, size = 1) + 
+  geom_rect(data = High.VIX, aes(xmin = StartDate, xmax = EndDate, ymin=-Inf, ymax=+Inf), fill='pink', alpha=0.4) +
+  geom_rect(data = Low.VIX, aes(xmin = StartDate, xmax = EndDate, ymin=-Inf, ymax=+Inf), fill='palegreen4', alpha=0.2) +
+  facet_wrap(~Period, scales = "free") +
+  ylim(-0.1, 1) +
+  theme_bw() +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(x = NULL, caption = "Green: high VIX, red: low VIX")
+```
+```{r dcc8, warning=FALSE, fig.align='center', fig.cap="South Africa-Latin America DCC \\label{dcc8}", fig.height=3, fig.width=6, include=TRUE}
+ggplot(df.corr %>% filter(Group == "Latin America")) + 
+  geom_line(aes(x = date, y = Rho, color = Country), alpha = 0.6, size = 1) + 
+  geom_rect(data = High.VIX, aes(xmin = StartDate, xmax = EndDate, ymin=-Inf, ymax=+Inf), fill='pink', alpha=0.4) +
+  geom_rect(data = Low.VIX, aes(xmin = StartDate, xmax = EndDate, ymin=-Inf, ymax=+Inf), fill='palegreen4', alpha=0.2) +
+  facet_wrap(~Period, scales = "free") +
+  ylim(-0.1, 1) +
+  theme_bw() +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(x = NULL, caption = "Green: high VIX, red: low VIX")
+```
+```{r dcc9, warning=FALSE, fig.align='center', fig.cap="South Africa-Europe DCC\\label{dcc9}", fig.height=3, fig.width=6, include=TRUE}
+ggplot(df.corr %>% filter(Group == "Europe")) + 
+  geom_line(aes(x = date, y = Rho, color = Country), alpha = 0.6, size = 1) + 
+  geom_rect(data = High.VIX, aes(xmin = StartDate, xmax = EndDate, ymin=-Inf, ymax=+Inf), fill='pink', alpha=0.4) +
+  geom_rect(data = Low.VIX, aes(xmin = StartDate, xmax = EndDate, ymin=-Inf, ymax=+Inf), fill='palegreen4', alpha=0.2) +
+  facet_wrap(~Period, scales = "free") +
+  ylim(-0.1, 1) +
+  theme_bw() +
+  theme(text = element_text(size = 10), axis.text = element_text(size = 10, hjust = 1, angle = 90),
+        plot.title = element_text(size = 10)) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(x = NULL, caption = "Green: high VIX, red: low VIX")
+```
+
+
+\newpage
+
+<!-- Make title of bibliography here: -->
+<!-- \newpage -->
+
+# References \label{References}
