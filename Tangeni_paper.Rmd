@@ -197,7 +197,7 @@ Figures \ref{figreturns} - \ref{figreturns4} illustrate the weekly equity return
 
 ```{r figreturns, fig.align='center', fig.cap="Weekly Equity Returns - BRICS  \\label{figreturns}", fig.height=3.7, fig.width=7}
 
-returns <- read_excel(path = "C:/Users/Tanga/Documents/Financial Econometrics/template/data/returns_brics.xlsx",
+returns <- read_excel(path = "./data/returns_brics.xlsx",
                       col_names = T)
 
 returns$Date <- as.Date(returns$Date)
@@ -222,7 +222,7 @@ print(g1)
 
 ```{r figreturns2, fig.align='center', fig.cap="Weekly Equity Returns - Latin America \\label{figreturns2}", fig.height=3.7, fig.width=7}
 
-returns <- read_excel(path = "C:/Users/Tanga/Documents/Financial Econometrics/template/data/returns_latinamerica.xlsx",
+returns <- read_excel(path = "./data/returns_latinamerica.xlsx",
                       col_names = T)
 
 returns$Date <- as.Date(returns$Date)
@@ -245,7 +245,7 @@ print(g1)
 ```
 
 ```{r figreturns3, fig.align='center', fig.cap="Weekly Equity Returns - Asia \\label{figreturns3}", fig.height=3.7, fig.width=7}
-returns <- read_excel(path = "C:/Users/Tanga/Documents/Financial Econometrics/template/data/returns_asia.xlsx",
+returns <- read_excel(path = "./data/returns_asia.xlsx",
                       col_names = T)
 
 returns$Date <- as.Date(returns$Date)
@@ -268,7 +268,7 @@ print(g1)
 ```
 
 ```{r figreturns4, fig.align='center', fig.cap="Weekly Equity Returns - Europe \\label{figreturns4}", fig.height=3.7, fig.width=6}
-returns <- read_excel(path = "C:/Users/Tanga/Documents/Financial Econometrics/template/data/returns_europe.xlsx",
+returns <- read_excel(path = "./data/returns_europe.xlsx",
                       col_names = T)
 
 returns$Date <- as.Date(returns$Date)
